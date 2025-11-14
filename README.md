@@ -1,6 +1,27 @@
 # Xpensify Draft Claim AI Agent
 
-This project processes receipt files (images) and generates a **draft claim link** after running through the notebook step by step.
+Xpensify Draft Claim AI Agent is an automated tool that scans receipt images, extracts expense details using Google Gemini AI, and creates a draft claim in Xpensify — all in one command.
+
+### The workflow is:
+
+- You place all your bill images inside the receipts/ folder
+
+- Run the given command after the setup
+
+### The tool:
+
+- Reads each bill image
+
+- Extracts vendor, date, amount, expense type
+
+- Maps it into Xpensify expense format
+
+- Creates a new claim
+
+- Uploads all expenses under that claim
+
+- Prints a draft claim link at the end
+
 
 ---
 
@@ -9,43 +30,70 @@ This project processes receipt files (images) and generates a **draft claim link
 
 ### Clone the Repository
 
-Clone and chnage current directory to xpensify_draft_claim_ai_agent
-
-### Create virtual environment and activate(mac)
-
-```bash
-python3 -m venv venv
-source venv/bin/activate
-```
-
-### Install Requirements
-
-```bash
-pip install --upgrade pip
-pip install -r requirements.txt
-```
+Clone and change current directory to xpensify_draft_claim_ai_agent
 
 ### Set Environment Variables
 
 Create a .env file in the root of the project with your keys/tokens.
+
 Example (.env.example):
+
 ```bash
 GEMINI_API_KEY=your_gemini_api_key
 MEMBER_TOKEN=your_member_token
-XPENSIFY_BASE_URL=https://xpensify.sahaj.ai/api/v1 (based on env)
 ```
+
+
+#### 🔑 How to Generate Required Keys
+✔ GEMINI_API_KEY
+
+Get your Gemini API key here (Google AI Studio):
+👉 https://aistudio.google.com/app/apikey
+
+#### ✔ MEMBER_TOKEN
+
+Login to sadhak.sahaj.ai, open DevTools → Network, trigger any API call, and copy the Authorization Bearer token.
+Use that token as MEMBER_TOKEN
 
 ### Prepare the Receipts Folder
 
-Create a receipts/ folder and place your bill images here.
+In the receipts/ folder place your bill images (remove he sample one present).
 
-### Run the Notebook
+### Run the command
 
-1. Open xpensify_claim_generator.ipynb.
 
-2. Run each code block in order, one by one.
+```bash
+make run CLAIM_TITLE="claim title here"
+```
+### Common Errors
 
-3. After executing the last block in the notebook, a claim draft link will be generated in the output.
+1️⃣ 401 Unauthorized
+
+This error means your MEMBER_TOKEN is invalid or expired. 
+- re-populate the member auth token from sadhak.
+
+2️⃣ 429/503 Too Many Requests (Gemini API Rate Limit/Service Unavailable)
+
+This happens when Gemini receives too many requests in a short time.
+ - Wait a few seconds and retry
+
+ - If it continues, generate a new API key
+
+
+## Current Limitations & Future Improvements
+
+- Currently supports only .jpg and .jpeg images
+(support for PNG, PDF, and other formats can be added easily)
+
+- Uses Google Gemini API directly; rate limits may apply
+
+- Can be converted into a web-based chat interface using Google ADK (Web Chat)
+
+- Logic can be extended to multi-project selection,multiple claims generation. 
+
+
+
+
 
 
 
