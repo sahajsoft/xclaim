@@ -14,9 +14,7 @@ MEMBER_TOKEN = os.getenv("MEMBER_AUTH_TOKEN")
 API_BASE_URL = "https://api.sadhak.sahaj.ai/xpensify"
 
 # Define constants for the script
-IMAGE_FOLDER_PATH = "receipts"
-CLAIM_TITLE = "Event Expenses"
-PROJECT_NAME = "Dummy"
+FILES_FOLDER_PATH = "receipts"
 
 def ask_user_to_select_project(projects):
     print("\nAvailable Projects:")
@@ -68,17 +66,17 @@ def setup():
         print(f"❌ Setup Error: Failed to fetch data. {e}")
         raise
 
-def run_extraction_agent(base64_image_data, mime_type, setup_data):
-    """Analyzes the bill image using Gemini AI and returns structured data."""
+def run_extraction_agent(base64_file_data, mime_type, setup_data):
+    """Analyzes the bill file using Gemini AI and returns structured data."""
     print("\n-> Extraction Agent: Analyzing bill with Gemini AI...")
 
     if not GEMINI_API_KEY:
         raise ValueError("GEMINI_API_KEY is not set in your .env file.")
 
     valid_expense_type_names = [et['name'] for et in setup_data['expense_types']]
-    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key={GEMINI_API_KEY}"
+    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
 
-    system_prompt = f"""You are an intelligent expense processing agent. Analyze the provided bill image.
+    system_prompt = f"""You are an intelligent expense processing agent. Analyze the provided bill file.
     1. Extract the following fields: date, vendor, amount (as a number), currency (the 3-letter symbol, e.g., USD, EUR, INR).
     2. For the date, find the primary date of the transaction and format it as YYYY-MM-DD.
     3. Classify the expense into ONE of the following categories: {json.dumps(valid_expense_type_names)}.
@@ -86,7 +84,7 @@ def run_extraction_agent(base64_image_data, mime_type, setup_data):
     If a value cannot be determined, set it to an empty string or null for amount."""
 
     payload = {
-        "contents": [{"parts": [{"text": system_prompt}, {"inlineData": {"mimeType": mime_type, "data": base64_image_data}}]}],
+        "contents": [{"parts": [{"text": system_prompt}, {"inlineData": {"mimeType": mime_type, "data": base64_file_data}}]}],
         "generationConfig": {"responseMimeType": "application/json"}
     }
 
@@ -124,9 +122,9 @@ def update_claim_title(claim_pk, title):
     update_title_res.raise_for_status()
     print(f"Successfully set title to: '{title}'")
 
-def add_expense_to_claim(claim_pk, extracted_data, setup_data, image_data, image_path, mime_type, selected_project):
+def add_expense_to_claim(claim_pk, extracted_data, setup_data, file_data, file_path, mime_type, selected_project):
     """Adds a single expense and its corresponding bill to an existing claim."""
-    print(f"\n-> Submission Agent: Adding expense from '{os.path.basename(image_path)}' to claim {claim_pk}...")
+    print(f"\n-> Submission Agent: Adding expense from '{os.path.basename(file_path)}' to claim {claim_pk}...")
     headers = {'Authorization': f'Bearer {MEMBER_TOKEN}'}
     params = {'role': 'User'}
 
@@ -137,7 +135,7 @@ def add_expense_to_claim(claim_pk, extracted_data, setup_data, image_data, image
         timesheet_id = selected_project["timesheetId"]
 
         if not expense_type_id: raise ValueError(f"Could not find ID for expense type: {extracted_data['expenseType']}")
-        if not timesheet_id: raise ValueError(f"Could not find ID for project: {PROJECT_NAME}")
+        if not timesheet_id: raise ValueError(f"Could not find ID for project: {selected_project}")
 
         expense_payload = {
             "amount": extracted_data['amount'],
@@ -157,22 +155,22 @@ def add_expense_to_claim(claim_pk, extracted_data, setup_data, image_data, image
         expense_id = expense_res_data['id']
         print(f"  Successfully created expense with ID: {expense_id}")
 
-        # Step B: Upload the bill image
+        # Step B: Upload the bill file
         print(f"  [Sub-step B] Uploading bill for expense {expense_id}...")
-        files = {'file': (os.path.basename(image_path), image_data, mime_type)}
+        files = {'file': (os.path.basename(file_path), file_data, mime_type)}
         upload_bill_res = requests.post(f"{API_BASE_URL}/claim/{claim_pk}/expense/{expense_id}/bill", headers=headers, params=params, files=files)
         upload_bill_res.raise_for_status()
         print(f"  Successfully uploaded bill. Status Code: {upload_bill_res.status_code}")
-        print(f"  -> Finished processing '{os.path.basename(image_path)}'.")
+        print(f"  -> Finished processing '{os.path.basename(file_path)}'.")
 
     except requests.exceptions.RequestException as e:
-        print(f"❌ Submission Agent Error for '{os.path.basename(image_path)}': API call failed. {e}")
+        print(f"❌ Submission Agent Error for '{os.path.basename(file_path)}': API call failed. {e}")
         if e.response is not None:
             print(f"Response Body: {e.response.text}")
         raise
 
 def parse_arguments():
-    parser = argparse.ArgumentParser(description="Process expense claim images and submit to Xpensify.")
+    parser = argparse.ArgumentParser(description="Process expense claim files and submit to Xpensify.")
     parser.add_argument("--claim-title", required=True, help="Title for the new claim.")
     return parser.parse_args()
 
@@ -185,19 +183,19 @@ def main():
         if not MEMBER_TOKEN or not GEMINI_API_KEY:
             raise ValueError("MEMBER_TOKEN and GEMINI_API_KEY must be set in the .env file.")
 
-        print(f"-> Orchestrator: Searching for images in '{IMAGE_FOLDER_PATH}'...")
-        if not os.path.isdir(IMAGE_FOLDER_PATH):
-            raise FileNotFoundError(f"The specified image folder does not exist: {IMAGE_FOLDER_PATH}")
+        print(f"-> Orchestrator: Searching for files in '{FILES_FOLDER_PATH}'...")
+        if not os.path.isdir(FILES_FOLDER_PATH):
+            raise FileNotFoundError(f"The specified file folder does not exist: {FILES_FOLDER_PATH}")
 
-        supported_extensions = ["*.jpg", "*.jpeg", "*.png"]
-        image_paths = []
+        supported_extensions = ["*.jpg", "*.jpeg", "*.png","*.pdf"]
+        file_paths = []
         for ext in supported_extensions:
-            image_paths.extend(glob.glob(os.path.join(IMAGE_FOLDER_PATH, ext)))
+            file_paths.extend(glob.glob(os.path.join(FILES_FOLDER_PATH, ext)))
 
-        if not image_paths:
-            raise FileNotFoundError(f"No image files (.jpg, .jpeg, .png) found in '{IMAGE_FOLDER_PATH}'.")
+        if not file_paths:
+            raise FileNotFoundError(f"No files (.jpg, .jpeg, .png, .pdf) found in '{FILES_FOLDER_PATH}'.")
 
-        print(f"-> Orchestrator: Found {len(image_paths)} images to process.")
+        print(f"-> Orchestrator: Found {len(file_paths)} files to process.")
 
         # 1. Run Setup once
         setup_data = setup()
@@ -210,25 +208,34 @@ def main():
         claim_pk = create_new_claim()
         update_claim_title(claim_pk, CLAIM_TITLE)
 
-        # 3. Loop through each image and process it
-        total_expenses = len(image_paths)
-        for index, current_image_path in enumerate(image_paths):
+        # 3. Loop through each file and process it
+        total_expenses = len(file_paths)
+        for index, current_file_path in enumerate(file_paths):
             print("\n" + "-"*50)
-            print(f"Processing Expense {index + 1} of {total_expenses}: {os.path.basename(current_image_path)}")
+            print(f"Processing Expense {index + 1} of {total_expenses}: {os.path.basename(current_file_path)}")
             print("-"*50)
 
-            with open(current_image_path, "rb") as image_file:
-                image_data = image_file.read()
-            base64_image_data = base64.b64encode(image_data).decode('utf-8')
+            with open(current_file_path, "rb") as file:
+                data = file.read()
+            base64_file_data = base64.b64encode(data).decode('utf-8')
 
-            file_extension = os.path.splitext(current_image_path)[1].lower()
-            mime_type = 'image/jpeg' if file_extension in ['.jpeg', '.jpg'] else 'image/png'
+            file_extension = os.path.splitext(current_file_path)[1].lower()
+            if file_extension in ['.jpeg', '.jpg']:
+                mime_type = 'image/jpeg'
+            elif file_extension == '.png':
+                mime_type = 'image/png'
+            elif file_extension == '.pdf':
+                mime_type = 'application/pdf'
+            else:
+                raise ValueError(f"Unsupported file extension: {file_extension}")
+            
+            print(f"Detected file type: {mime_type}")
 
-            extracted_data = run_extraction_agent(base64_image_data, mime_type, setup_data)
+            extracted_data = run_extraction_agent(base64_file_data, mime_type, setup_data)
             print("\n--- Extracted Data from AI ---")
             print(json.dumps(extracted_data, indent=2))
 
-            add_expense_to_claim(claim_pk, extracted_data, setup_data, image_data, current_image_path, mime_type,selected_project)
+            add_expense_to_claim(claim_pk, extracted_data, setup_data, data, current_file_path, mime_type,selected_project)
 
         final_url = f"https://sadhak.sahaj.ai/xpensify/user/claims/{claim_pk}/expenses"
         print("\n" + "="*50)
