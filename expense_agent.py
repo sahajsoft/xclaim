@@ -122,6 +122,14 @@ def update_claim_title(claim_pk, title):
     update_title_res.raise_for_status()
     print(f"Successfully set title to: '{title}'")
 
+def delete_claim(claim_pk):
+    """Deleting the created Draft claim.""" 
+    headers = {'Authorization': f'Bearer {MEMBER_TOKEN}'}
+    params = {'role': 'User'}
+    delete_res = requests.delete(f"{API_BASE_URL}/claim/{claim_pk}", headers=headers, params=params)
+    delete_res.raise_for_status()
+    print(f"Claim deleted as intermediate step failed")
+
 def add_expense_to_claim(claim_pk, extracted_data, setup_data, file_data, file_path, mime_type, selected_project):
     """Adds a single expense and its corresponding bill to an existing claim."""
     print(f"\n-> Submission Agent: Adding expense from '{os.path.basename(file_path)}' to claim {claim_pk}...")
@@ -177,6 +185,7 @@ def parse_arguments():
 
 def main():
     """Main function to orchestrate the expense claim process."""
+    claim_pk = None
     try:
         args = parse_arguments()
         CLAIM_TITLE = args.claim_title
@@ -245,6 +254,8 @@ def main():
 
     except Exception as error:
         print(f"\n❌ An error occurred during the orchestration: {error}")
+        if claim_pk:
+            delete_claim(claim_pk=claim_pk)
 
 # --- Script Execution ---
 
